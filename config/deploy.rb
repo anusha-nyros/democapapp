@@ -35,10 +35,34 @@ set :scm, :git
 # Default value for keep_releases is 5
  set :keep_releases, 5
 
-
+set :asset_env, "RAILS_GROUPS=assets DATABASE_URL=postgresql://postgres:root@localhost/#{fetch(:application)}_#{fetch(:rails_env)}"
 #set :filter, :hosts => %w{heroku.com, 10.90.90.110}
 
 namespace :deploy do
+
+ task :start do
+	on roles(:app) do
+        within release_path do
+          with rails_env: fetch(:rails_env) do
+	set :app_port, ask("Port", nil)
+	execute :bundle, "exec thin start -p #{fetch(:app_port)} -d -e RAILS_ENV=#{fetch(:rails_env)}"
+        #execute :bundle, "exec rails s -p 2003 -d -e RAILS_ENV=#{fetch(:rails_env)}"
+          end
+        end
+      end
+  end
+
+  desc "Stop the Thin processes"
+  task :stop do
+      on roles(:app) do
+        within release_path do
+          with rails_env: fetch(:rails_env) do
+	execute :bundle, "exec thin stop -p #{fetch(:app_port)} -d -e RAILS_ENV=#{fetch(:rails_env)}"
+        #execute :bundle, "exec rails s -p 2003 -d -e RAILS_ENV=#{fetch(:rails_env)}"
+          end
+        end
+      end
+  end
 
 desc "Setting Database configuration"
  task :generate_yml do
@@ -79,7 +103,7 @@ desc "Setting Database configuration"
 		#File.write('', "#{db_config}")
 		execute "mkdir -p #{shared_path}/config"
 		#upload! db_config, "#{shared_path}/config/database.yml"
-		puts `db_config, "#{shared_path}/config/database.yml"`
+		#put `db_config, "#{shared_path}/config/database.yml"`, roles: %w{web,app,db}
 		#execute "File.open('#{shared_path}/config/database.yml', 'w') { |file| file.write('#{db_config}') }"
 		#execute "File.write('#{shared_path}/config/database.yml','#{db_config}')"
 		puts "#{db_config}"
@@ -88,12 +112,7 @@ desc "Setting Database configuration"
 puts "sfhsgdfjsgdfj"
 	end
 end
-task :precompile do 
-	on roles(:all) do
-		execute :rake, "assets:precompile RAILS_ENV=#{fetch(:rails_env)}"
-	end
-end
-before "deploy:migrate", :generate_yml
+before "deploy:assets:precompile", :generate_yml
 desc "Starting Heroku application"
 task :configure do
   on roles(:web) do
@@ -115,22 +134,19 @@ task :push do
 end
 #after "deploy:started", "deploy:rename"
 after "deploy:started", "deploy:push"
-  desc 'Restart application'
-  task :restart do
-     on roles(:app), in: :sequence, wait: 5 do
-      # Your restart mechanism here, for example:
-	puts "Deployed successfully"
-      #execute "touch #{release_path}/tmp/restart.txt"
-     # execute "touch #{current_path}/tmp/thin.pid"
-	#execute :bundle, "exec thin restart -p 2003 -d -e RAILS_ENV=#{fetch(:rails_env)}"
-    end
-  end
 
+desc 'precompile application'
+task :heroku_precompile do
+	on roles(:all), in: :sequence, wait: 5 do
+		puts `heroku run rake assets:precompile --app #{fetch(:application)}`
+	end
+end
+end
   desc 'migrate application'
   task :heroku_migrate do
     on roles(:all), in: :sequence, wait: 5 do
 	puts "Migration started"
-      puts `heroku rake db:migrate --app #{fetch(:application)}`
+      puts `heroku run rake db:migrate --app #{fetch(:application)}`
     end
   end
 
@@ -145,6 +161,17 @@ task :heroku_start do
  	end
 end
 after :finished, :heroku_start
+  desc 'Restart application'
+  task :restart do
+     on roles(:app), in: :sequence, wait: 5 do
+      # Your restart mechanism here, for example:
+	puts "Deployed successfully"
+      #execute "touch #{release_path}/tmp/restart.txt"
+     # execute "touch #{current_path}/tmp/thin.pid"
+	#execute :bundle, "exec thin restart -p 2003 -d -e RAILS_ENV=#{fetch(:rails_env)}"
+    end
+  end
+
 
  desc "Linking Database.yml file"
  task :symlink do
@@ -163,12 +190,13 @@ desc 'Runs rake db:create'
         end
       end
     end
-after "deploy:migrate", "deploy:precompile"
-before "deploy:migrate", :symlink 
+
+before "deploy:assets:precompile", :symlink 
 before "deploy:migrate", :create
+before "deploy:assets:precompile", "deploy:heroku_precompile"
 before "deploy:migrate", "deploy:heroku_migrate" 
   after :publishing, :restart
-
+ after :restart, :start
   after :restart, :clear_cache do
     on roles(:web), in: :groups, limit: 3, wait: 10 do
       # Here we can do anything such as:
