@@ -25,8 +25,7 @@ gem 'devise'
 
 gem 'whenever'
 
-gem 'rails_12factor', group: :production
-
+gem 'rails_12factor'
 # See https://github.com/sstephenson/execjs#readme for more supported runtimes
 # gem 'therubyracer', platforms: :ruby
 
