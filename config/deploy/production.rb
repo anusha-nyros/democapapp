@@ -4,10 +4,9 @@
 # server in each group is considered to be the first
 # unless any hosts have the primary property set.
 # Don't declare `role :all`, it's a meta role
-role :app, %w{anusha-nyros@github.com, 10.90.90.110}
-role :web, %w{democapapp.com, 10.90.90.110}
-role :db,  %w{democapapp.com}, :primary => true
-
+role :app, %w{heroku.com}
+role :web, %w{heroku.com}
+role :db,  %w{heroku.com}, :primary => true
 # Extended Server Syntax
 # ======================
 # This can be used to drop a more detailed server
@@ -15,9 +14,7 @@ role :db,  %w{democapapp.com}, :primary => true
 # something that quacks like a hash can be used to set
 # extended properties on the server.
 set :password, ask("Server Password", nil)
-server 'github.com', user: 'anusha-nyros', :password => "#{fetch(:password)}", roles: %w{app}, my_property: :my_value
-server 'democapapp.com', user: 'anusha_nyros@yahoo.com', :password => "#{fetch(:password)}", roles: %w{app,web,db}, my_property: :my_value
-server '10.90.90.110', user: 'nyros', :password => "#{fetch(:password)}", roles: %w{app,db}, my_property: :my_value
+server "heroku.com", user: "#{fetch(:heroku_username)}", password: "#{fetch(:heroku_password)}", roles: %w{web,app,db}
 
 # you can set custom ssh options
 # it's possible to pass any option but you need to keep in mind that net/ssh understand limited list of options

@@ -37,89 +37,69 @@ set :scm, :git
 # Default value for keep_releases is 5
  set :keep_releases, 5
 
-task :deploy => ['deploy:push', 'deploy:restart', 'deploy:tag']
+
  
 namespace :deploy do
-  task :migrations => [:push, :off, :migrate, :restart, :on, :tag]
-  task :rollback => [:off, :push_previous, :restart, :on]
- 
-  task :push do
-    puts 'Deploying site to Heroku ...'
-    execute "git push heroku master"
+ before :deploy, "deploy:configure"
+
+desc "Starting Heroku application"
+task :configure do
+  on roles(:all) do
+	puts "heroku starting"
+	execute "heroku login"
+	set :heroku_username, ask("Heroku Username", nil)
+	set :heroku_password, ask("Heroku Password", nil)
+	set :user, "#{fetch(:heroku_username)}"
+	set :password, "#{fetch(:heroku_password)}"
+	execute "heroku create"
+	execute "heroku apps:rename democapapp"
+	execute :rake, "assets:precomplie RAILS_ENV=#{fetch{rails_env}}"
   end
-  
-  task :restart do
-    puts 'Restarting app servers ...'
-    execute "heroku restart"
-  end
-  
-  task :tag do
-    release_name = "release-#{Time.now.utc.strftime("%Y%m%d%H%M%S")}"
-    puts "Tagging release as '#{release_name}'"
-    execute "git tag -a #{release_name} -m 'Tagged release'"
-    execute "git push --tags heroku"
-  end
-  
-  task :migrate do
-    puts 'Running database migrations ...'
-    execute "heroku rake db:migrate"
-  end
-  
-  task :off do
-    puts 'Putting the app into maintenance mode ...'
-    execute "heroku maintenance:on"
-  end
-  
-  task :on do
-    puts 'Taking the app out of maintenance mode ...'
-    execute "heroku maintenance:off"
-  end
- 
-  task :push_previous do
-    releases = `git tag`.split("\n").select { |t| t[0..7] == 'release-' }.sort
-    current_release = releases.last
-    previous_release = releases[-2] if releases.length >= 2
-    if previous_release
-      puts "Rolling back to '#{previous_release}' ..."
-      
-      puts "Checking out '#{previous_release}' in a new branch on local git repo ..."
-      execute "git checkout #{previous_release}"
-      execute "git checkout -b #{previous_release}"
-      
-      puts "Removing tagged version '#{previous_release}' (now transformed in branch) ..."
-      execute "git tag -d #{previous_release}"
-      execute "git push heroku :refs/tags/#{previous_release}"
-      
-      puts "Pushing '#{previous_release}' to Heroku master ..."
-      execute "git push heroku +#{previous_release}:master --force"
-      
-      puts "Deleting rollbacked release '#{current_release}' ..."
-      execute "git tag -d #{current_release}"
-      execute "git push heroku :refs/tags/#{current_release}"
-      
-      puts "Retagging release '#{previous_release}' in case to repeat this process (other rollbacks)..."
-      execute "git tag -a #{previous_release} -m 'Tagged release'"
-      execute "git push --tags heroku"
-      
-      puts "Turning local repo checked out on master ..."
-      execute "git checkout master"
-      puts 'All done!'
-    else
-      puts "No release tags found - can't roll back!"
-      execute releases
-    end
+end  
+
+desc "Renaming Heroku application"
+task :rename do
+  on roles(:all) do
+	puts "renaming application"
+	
   end
 end
+
+desc "Pushing to Heroku "
+task :push do
+  on roles(:all) do
+	puts "Pushing heroku application"
+	execute "git push heroku master"
+  end
+end
+#after "deploy:started", "deploy:rename"
+after "deploy:started", "deploy:push"
   desc 'Restart application'
   task :restart do
     on roles(:app), in: :sequence, wait: 5 do
-      # Your restart mechanism here, for example:
 	puts "Deployed successfully"
       execute "touch #{release_path}/tmp/restart.txt"
-     # execute "touch #{current_path}/tmp/thin.pid"
-	#execute :bundle, "exec thin restart -p 2003 -d -e RAILS_ENV=#{fetch(:rails_env)}"
     end
   end
+
+  desc 'migrate application'
+  task :heroku_migrate do
+    on roles(:all), in: :sequence, wait: 5 do
+	puts "Migration started"
+      execute "heroku run rake db:migrate"
+    end
+  end
+
+
+desc "Heroku running"
+task :heroku_start do
+	on roles(:all) do
+		puts "heroku starting"
+		execute "heroku open"
+ 	end
+end
+after :publishing, :heroku_start
+
  desc "Linking Database.yml file"
  task :symlink do
     on roles(:app) do
@@ -128,13 +108,13 @@ end
  end
 desc "Setting Database configuration"
  task :generate_yml do
-	on roles(:app,:web) do
+	on roles(:all) do
 		set :db_username, ask("DB Server Username", nil)
 		set :db_password, ask("DB Server Password", nil)
 		 
 		db_config = <<-EOF
 		base: &base
-		adapter: postgresql
+		adapter: mysql2
 		encoding: utf8
 		reconnect: false
 		pool: 5
@@ -158,9 +138,10 @@ desc "Setting Database configuration"
 		execute "cat #{db_config}">"#{shared_path}/config/database.yml"
 		#put db_config, "#{shared_path}/config/database.yml"
 	end
+end
 before "deploy:migrate", :generate_yml
 before "deploy:migrate", :symlink 
-
+before "deploy:migrate", "deploy:heroku_migrate" 
   after :publishing, :restart
 
   after :restart, :clear_cache do
