@@ -144,7 +144,7 @@ task :heroku_start do
 		end
  	end
 end
-after :publishing, :heroku_start
+after :finished, :heroku_start
 
  desc "Linking Database.yml file"
  task :symlink do

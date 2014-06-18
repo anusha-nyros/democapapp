@@ -62,6 +62,6 @@ gem 'capistrano-bundler'
 gem 'capistrano-rbenv', "~> 2.0" 
 
 #gem 'rvm1-capistrano3', :require => false
-gem 'capistrano-rvm', :github => 'capistrano/rvm.git'
+gem 'capistrano-rvm', :github => 'capistrano/rvm'
 # Use debugger
 # gem 'debugger', group: [:development, :test]
