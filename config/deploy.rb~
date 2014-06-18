@@ -1,11 +1,9 @@
 # config valid only for Capistrano 3.1
 lock '3.1.0'
-
-set :default_env, { rvm_bin_path: '~/.rvm/bin' }
-set :application, 'cap_demo'
-set :deploy_to, '/var/www/anusha/#{fetch(:application)}'
+set :application, 'democapapp'
+set :deploy_to, '/home/nyros/anusha/democapapp'
 SSHKit.config.command_map[:rake]  = "#{fetch(:default_env)[:rvm_bin_path]}/rvm ruby-#{fetch(:rvm_ruby_version)} do bundle exec rake"
-set :repo_url, 'git://github.com/anusha-nyros/democapapp.git'
+set :repo_url, 'https://github.com/anusha-nyros/democapapp.git'
 set :rails_env, "production"
 # Default branch is :master
 # ask :branch, proc { `git rev-parse --abbrev-ref HEAD`.chomp }
@@ -26,7 +24,7 @@ set :scm, :git
  set :pty, true
 
 # Default value for :linked_files is []
- set :linked_files, %w{config/database.yml}
+ #set :linked_files, %w{config/database.yml}
 
 # Default value for linked_dirs is []
 # set :linked_dirs, %w{bin log tmp/pids tmp/cache tmp/sockets vendor/bundle public/system}
@@ -38,47 +36,93 @@ set :scm, :git
  set :keep_releases, 5
 
 
- 
-namespace :deploy do
- before :deploy, "deploy:configure"
+#set :filter, :hosts => %w{heroku.com, 10.90.90.110}
 
+namespace :deploy do
+
+desc "Setting Database configuration"
+ task :generate_yml do
+	puts "sfshfsdad"
+	on roles(:app) do
+		set :db_username, ask("DB Server Username", nil)
+		set :db_password, ask("DB Server Password", nil)
+		 
+		db_config = <<-EOF
+		 
+		development:
+		database: #{fetch(:application)}_development
+		adapter: mysql
+		encoding: utf8
+		reconnect: false
+		pool: 5
+		username: #{fetch(:db_username)}
+		password: #{fetch(:db_password)}
+		 
+		test:
+		database: #{fetch(:application)}_test
+		adapter: mysql
+		encoding: utf8
+		reconnect: false
+		pool: 5
+		username: #{fetch(:db_username)}
+		password: #{fetch(:db_password)}
+		 
+		production:
+		database: #{fetch(:application)}_production
+		adapter: mysql
+		encoding: utf8
+		reconnect: false
+		pool: 5
+		username: #{fetch(:db_username)}
+		password: #{fetch(:db_password)}
+		EOF
+		#File.write('', "#{db_config}")
+		execute "mkdir -p #{shared_path}/config"
+		#upload! db_config, "#{shared_path}/config/database.yml"
+		puts `db_config, "#{shared_path}/config/database.yml"`
+		#execute "File.open('#{shared_path}/config/database.yml', 'w') { |file| file.write('#{db_config}') }"
+		#execute "File.write('#{shared_path}/config/database.yml','#{db_config}')"
+		puts "#{db_config}"
+		template = File.expand_path('../database.yml', __FILE__)
+		upload! "#{template}", "#{shared_path}/config/database.yml"
+puts "sfhsgdfjsgdfj"
+	end
+end
+task :precompile do 
+	on roles(:all) do
+		execute :rake, "assets:precompile RAILS_ENV=#{fetch(:rails_env)}"
+	end
+end
+before "deploy:migrate", :generate_yml
 desc "Starting Heroku application"
 task :configure do
-  on roles(:all) do
+  on roles(:web) do
 	puts "heroku starting"
-	execute "heroku login"
-	set :heroku_username, ask("Heroku Username", nil)
-	set :heroku_password, ask("Heroku Password", nil)
-	set :user, "#{fetch(:heroku_username)}"
-	set :password, "#{fetch(:heroku_password)}"
-	execute "heroku create"
-	execute "heroku apps:rename democapapp"
-	execute :rake, "assets:precomplie RAILS_ENV=#{fetch{rails_env}}"
+	with path: 'git@heroku.com:#{fetch(:application)}.git' do
+		puts `heroku keys`
+	end
   end
 end  
-
-desc "Renaming Heroku application"
-task :rename do
-  on roles(:all) do
-	puts "renaming application"
-	
-  end
-end
 
 desc "Pushing to Heroku "
 task :push do
   on roles(:all) do
 	puts "Pushing heroku application"
-	execute "git push heroku master"
+	with path: 'git@heroku.com:#{fetch(:application)}.git' do
+		puts `git push -f heroku master`
+	end
   end
 end
 #after "deploy:started", "deploy:rename"
 after "deploy:started", "deploy:push"
   desc 'Restart application'
   task :restart do
-    on roles(:app), in: :sequence, wait: 5 do
+     on roles(:app), in: :sequence, wait: 5 do
+      # Your restart mechanism here, for example:
 	puts "Deployed successfully"
-      execute "touch #{release_path}/tmp/restart.txt"
+      #execute "touch #{release_path}/tmp/restart.txt"
+     # execute "touch #{current_path}/tmp/thin.pid"
+	#execute :bundle, "exec thin restart -p 2003 -d -e RAILS_ENV=#{fetch(:rails_env)}"
     end
   end
 
@@ -86,7 +130,7 @@ after "deploy:started", "deploy:push"
   task :heroku_migrate do
     on roles(:all), in: :sequence, wait: 5 do
 	puts "Migration started"
-      execute "heroku run rake db:migrate"
+      puts `heroku rake db:migrate --app #{fetch(:application)}`
     end
   end
 
@@ -95,7 +139,9 @@ desc "Heroku running"
 task :heroku_start do
 	on roles(:all) do
 		puts "heroku starting"
-		execute "heroku open"
+		with path: 'git@heroku.com:#{fetch(:application)}.git' do
+			puts `heroku open`
+		end
  	end
 end
 after :publishing, :heroku_start
@@ -106,41 +152,20 @@ after :publishing, :heroku_start
      execute "ln -nfs #{shared_path}/config/database.yml #{release_path}/config/"
     end
  end
-desc "Setting Database configuration"
- task :generate_yml do
-	on roles(:all) do
-		set :db_username, ask("DB Server Username", nil)
-		set :db_password, ask("DB Server Password", nil)
-		 
-		db_config = <<-EOF
-		base: &base
-		adapter: mysql2
-		encoding: utf8
-		reconnect: false
-		pool: 5
-		username: #{fetch(:db_username)}
-		password: #{fetch(:db_password)}
-		 
-		development:
-		database: #{fetch(:application)}_development
-		<<: *base
-		 
-		test:
-		database: #{fetch(:application)}_test
-		<<: *base
-		 
-		production:
-		database: #{fetch(:application)}_production
-		<<: *base
-		EOF
-		 
-		execute "mkdir -p #{shared_path}/config"
-		execute "cat #{db_config}">"#{shared_path}/config/database.yml"
-		#put db_config, "#{shared_path}/config/database.yml"
-	end
-end
-before "deploy:migrate", :generate_yml
+
+desc 'Runs rake db:create'
+    task :create => [:set_rails_env] do
+      on primary fetch(:migration_role) do
+        within release_path do
+          with rails_env: fetch(:rails_env) do
+            execute :rake, "db:create RAILS_ENV=#{fetch(:rails_env)}"
+          end
+        end
+      end
+    end
+after "deploy:migrate", "deploy:precompile"
 before "deploy:migrate", :symlink 
+before "deploy:migrate", :create
 before "deploy:migrate", "deploy:heroku_migrate" 
   after :publishing, :restart
 
