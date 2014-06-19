@@ -1,4 +1,5 @@
 # config valid only for Capistrano 3.1
+require 'yaml'
 lock '3.1.0'
 set :application, 'democapapp'
 set :deploy_to, '/home/nyros/anusha/democapapp'
@@ -34,6 +35,8 @@ set :scm, :git
 
 # Default value for keep_releases is 5
  set :keep_releases, 5
+
+set :template_dir, '/home/nyros/Anu/ROR_Projects/June/Jun19/democapapp/config/deploy'
 
 set :asset_env, "RAILS_GROUPS=assets DATABASE_URL=postgresql://postgres:root@localhost/#{fetch(:application)}_#{fetch(:rails_env)}"
 #set :filter, :hosts => %w{heroku.com, 10.90.90.110}
@@ -72,43 +75,53 @@ desc "Setting Database configuration"
 		set :db_password, ask("DB Server Password", nil)
 		 
 		db_config = <<-EOF
-		 
-		development:
-		database: #{fetch(:application)}_development
-		adapter: mysql
-		encoding: utf8
-		reconnect: false
-		pool: 5
-		username: #{fetch(:db_username)}
-		password: #{fetch(:db_password)}
-		 
-		test:
-		database: #{fetch(:application)}_test
-		adapter: mysql
-		encoding: utf8
-		reconnect: false
-		pool: 5
-		username: #{fetch(:db_username)}
-		password: #{fetch(:db_password)}
-		 
-		production:
-		database: #{fetch(:application)}_production
-		adapter: mysql
-		encoding: utf8
-		reconnect: false
-		pool: 5
-		username: #{fetch(:db_username)}
-		password: #{fetch(:db_password)}
-		EOF
-		#File.write('', "#{db_config}")
+development:
+  database: #{fetch(:application)}_development
+  adapter: mysql2
+  encoding: utf8
+  reconnect: false
+  pool: 5
+  username: #{fetch(:db_username)}
+  password: #{fetch(:db_password)}		 
+test:
+  database: #{fetch(:application)}_test
+  adapter: mysql2
+  encoding: utf8
+  reconnect: false
+  pool: 5
+  username: #{fetch(:db_username)}
+  password: #{fetch(:db_password)}   
+production:
+  database: #{fetch(:application)}_production
+  adapter: mysql2
+  encoding: utf8
+  reconnect: false
+  pool: 5
+  username: #{fetch(:db_username)}
+  password: #{fetch(:db_password)}
+EOF
+		location = fetch(:template_dir, "config/deploy") + '/database.yml'
+		#template = File.file?(location) ? File.read(location) : db_config
+
+		#config = ERB.new(template)
+
 		execute "mkdir -p #{shared_path}/config"
+		puts "#{location}"
+		File.open(location,'w+') {|f| f.write db_config }
+	        #File.open("#{location}", 'w') { |f| db_config.to }
+		#puts "#{location}"
+     		#upload! "#{location}", "#{shared_path}/config/database.yml"
+		#File.write('', "#{db_config}")
+		#execute :system, "echo #{db_config}" > "#{shared_path}/config/database.yml"
 		#upload! db_config, "#{shared_path}/config/database.yml"
-		#put `db_config, "#{shared_path}/config/database.yml"`, roles: %w{web,app,db}
+		#execute :put, '#{db_config.to_yaml}, "#{shared_path}/config/database.yml"'
+		#put("#{db_config}", "#{shared_path}/config/database.yml") 
+		#execute "cat #{db_config}" > "#{shared_path}/config/database.yml"
 		#execute "File.open('#{shared_path}/config/database.yml', 'w') { |file| file.write('#{db_config}') }"
 		#execute "File.write('#{shared_path}/config/database.yml','#{db_config}')"
 		puts "#{db_config}"
-		template = File.expand_path('../database.yml', __FILE__)
-		upload! "#{template}", "#{shared_path}/config/database.yml"
+		#template = File.expand_path('../database.yml', __FILE__)
+		upload! "#{location}", "#{shared_path}/config/database.yml"
 puts "sfhsgdfjsgdfj"
 	end
 end
@@ -140,8 +153,7 @@ task :heroku_precompile do
 	on roles(:all), in: :sequence, wait: 5 do
 		puts `heroku run rake assets:precompile --app #{fetch(:application)}`
 	end
-end
-end
+   end
   desc 'migrate application'
   task :heroku_migrate do
     on roles(:all), in: :sequence, wait: 5 do
@@ -190,6 +202,19 @@ desc 'Runs rake db:create'
         end
       end
     end
+
+    desc "compile assets locally and upload before finalize_update"
+    task :assets do
+	on roles(:app) do
+	        %x[bundle exec rake assets:clean && bundle exec rake assets:precompile]
+        	ENV['COMMAND'] = " mkdir '#{release_path}/public/assets'"
+        	invoke
+		template = File.expand_path('../public/assets', __FILE_)
+        	upload! '#{template}', "#{release_path}/public/assets", {:recursive => true}
+	end
+    end
+after "deploy:finishing", "deploy:assets"
+
 
 before "deploy:assets:precompile", :symlink 
 before "deploy:migrate", :create

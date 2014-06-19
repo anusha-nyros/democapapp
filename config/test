@@ -1,0 +1,32 @@
+set :db_username, ask("DB Server Username", nil)
+		set :db_password, ask("DB Server Password", nil)
+		 
+		db_config = <<-EOF
+		 
+		development:
+		database: #{fetch(:application)}_development
+		adapter: mysql
+		encoding: utf8
+		reconnect: false
+		pool: 5
+		username: #{fetch(:db_username)}
+		password: #{fetch(:db_password)}
+		 
+		test:
+		database: #{fetch(:application)}_test
+		adapter: mysql
+		encoding: utf8
+		reconnect: false
+		pool: 5
+		username: #{fetch(:db_username)}
+		password: #{fetch(:db_password)}
+		 
+		production:
+		database: #{fetch(:application)}_production
+		adapter: mysql
+		encoding: utf8
+		reconnect: false
+		pool: 5
+		username: #{fetch(:db_username)}
+		password: #{fetch(:db_password)}
+		EOF
