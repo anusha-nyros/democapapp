@@ -213,7 +213,7 @@ desc 'Runs rake db:create'
         	upload! '#{template}', "#{release_path}/public/assets", {:recursive => true}
 	end
     end
-after "deploy:finishing", "deploy:assets"
+#after "deploy:finishing", "deploy:assets"
 
 
 before "deploy:assets:precompile", :symlink 
